@@ -1,0 +1,27 @@
+---
+- name: Ansible
+  hosts: all
+  become: yes
+  any_errors_fatal: true
+
+
+  tasks:
+  - name: Task Number1
+    yum: name=treeeeaboba state=latest
+    ignore_errors: yes
+
+  - name: Task Number2
+    shell: echo hallo chuvaki
+    register: results
+    failed_when: results.rc == 0
+    
+      #failed_when: " 'hallo' in results.stdout"
+
+
+  - debug:
+      var: results
+
+  - name: Task Number3
+    shell: echo Privet ss!!!!
+
+

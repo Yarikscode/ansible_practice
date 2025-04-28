@@ -1,0 +1,26 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for deploy_apache_web
+  - name: Check OS family
+    debug: var=ansible_os_family
+
+  - block:    # Block for RedHat
+
+    - name: Install Apache Web server for RedHat
+      yum: name=httpd state=latest
+
+    - name: Start WEb and Enabled
+      service: name=httpd state=started enabled=yes
+
+    when: ansible_os_family == "RedHat"
+
+  - name: generate index
+    template: src=index.html.j2 dest={{ destin_folder }}/index.html mode=055
+    notify:
+      - Restart Apache
+
+  - name: Copy index to server
+    copy: src={{ item }} dest={{ destin_folder }} mode=0555
+    with_fileglob: "*.*"
+    notify:
+      - Restart Apache

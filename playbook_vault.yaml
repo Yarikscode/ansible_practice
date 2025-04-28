@@ -1,0 +1,30 @@
+
+---
+
+- name: Ansible less
+  hosts: all
+  become: yes
+
+  vars:
+    admin_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32636564333630396636313766623135623932636562386331666164626538623364643664656337
+          6535373662613863323564373834623532656366313464360a333066663530653964623635653230
+          37303431356166306166653134353230663335336162643636613164653532626636333536643533
+          3631623561353031320a346463356266663366393362613563336362656361646462386537383539
+          3334
+
+  tasks:
+  - name: Install package Tree
+    yum: name=tree state=latest
+
+
+  - name: Create Config File
+    copy:
+      dest: "/home/yaroslav/myconfig.conf"
+      content:  |
+        port = 9092
+        log = 7days
+        home = /opt/kafka/bin/
+        user = admin
+        password = {{ admin_password }}

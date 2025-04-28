@@ -1,0 +1,34 @@
+
+---
+- name: Install Apache and Uploadl my Web Page
+  hosts: all
+  become: yes
+
+  vars:
+    source_file: ./website/index.html
+    destin_file: /var/www/html
+
+  
+  tasks:
+  - name: Check OS family
+    debug: var=ansible_os_family
+
+  - block:    # Block for RedHat
+
+    - name: Install Apache Web server for RedHat
+      yum: name=httpd state=latest
+
+    - name: Copy index to server
+      copy: src={{ source_file }} dest={{ destin_file }} mode=0555
+      notify: Restart Apache
+
+    - name: Start WEb and Enabled
+      service: name=httpd state=started enabled=yes
+        
+    when: ansible_os_family == "RedHat"
+
+  handlers:
+  - name: Restart Apache
+    service: name=httpd state=restarted
+
+

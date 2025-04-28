@@ -1,0 +1,37 @@
+
+---
+- name: My Super Playbook for Variables
+  hosts: all
+  become: yes
+
+
+  vars:
+    message1: priver
+    message2: Roman
+    secret: Xasdasdasd
+
+  tasks:
+
+  - name: Print secret
+    debug:
+       var: secret
+
+  - debug:
+      msg: "secret world: {{ secret }}"
+
+  - debug:
+      msg: "vladelec {{ owner }}"
+
+  - set_fact: full_message="{{ message1 }} {{ message2 }} from {{ owner }}"
+
+  - debug:
+      var: full_message
+
+  - debug:
+      var: ansible_os_family
+
+  - shell: uptime
+    register: results
+
+  - debug:
+      var: results.stdout
