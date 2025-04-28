@@ -1,0 +1,406 @@
+#начало
+проверяем ansible -i hosts.txt all -m ping - хосты из инвентори модулем ping
+
+создали ansible.cfg
+
+отменяем проверку fingerprint а также указываем инвентори
+
+#inventory
+
+[stag1]
+1.1.1.1
+
+[stag2]
+2.2.2.2
+
+
+[stag_all:children]
+stag1
+stag2
+
+[DB_all:children]
+stag_DB
+prod_DB
+
+[RAZNOE:children]
+stag_all
+DB_all
+
+[prod_server:vars]
+ansible_user=yaroslav
+ansible_ssh_private_key_file =./key/
+
+#посмотреть переменные
+yaroslav@ansiblemaster:~/ansible$ ansible-inventory --list
+{
+    "_meta": {
+        "hostvars": {
+            "linux1": {
+                "ansible_host": "192.168.31.155",
+                "ansible_ssh_private_key_file": "/home/yaroslav/.ssh/id_rsa",
+                "ansible_user": "yaroslav"
+            }
+        }
+    },
+    "all": {
+        "children": [
+            "ungrouped",
+            "stagins_servers"
+        ]
+    },
+    "stagins_servers": {
+        "hosts": [
+            "linux1"
+        ]
+    }
+}
+
+ansible-inventory --graph - тоже самое но в другом формате
+
+#AD-hoc команды - команды ансибл, если они не в файле
+
+ansible all -m setup - сканирует сервер и выдает инфу
+
+ansible all -m shell -a "uptime" - выполнить команду на удаленном хосте
+
+ansible all -m command -a "uptime" - выполнить команду на удаленном хосте, но не работают перенаправления и переменные окружения
+
+ansible all -m copy -a "src=privet.txt dest=/home/yaroslav/ mode=777" -b - передать файл
+
+ansible all -m file -a "path=/home/yaroslav/privet.txt state=absent" -b - удалить наш файл
+
+ansible all -m get_url -a "url=<url> dest=/home" -b -скачать с интернета
+
+ansible all -m yum -a "name=sysstat state=latest" -b - скачать пакет
+
+ansible all -m yum -a "name=sysstat state=removed" -b - удалить пакет
+
+ansible all -m uri -a "url=http://www.adv-it.net" - проверить доступность
+
+ansible all -m uri -a "url=http://www.adv-it.net return_content=yes" - посмотреть с контентом
+
+ansible all -m yum -a "name=httpd state=latest" -b - апачи
+
+ansible all -m service -a "name=httpd state=started enabled=yes" -b -настройка апачи сервиса
+
+ansible all -m shell -a "ls /var" -vvv - чем больше v тем больше инфы, максимум 4v или 5
+
+ansible-doc -l -посмотреть все модули
+
+
+#Перенос переменных в group_vars
+
+создаем папку group_vars
+
+в ней создаем файлы с название группы и вписываем названия с пробелами и : вместо =
+
+#playbook
+
+пишем playbooks
+
+debug:
+  var: secret - вывести значение переменной, когда не знаешь что точно она выводит
+
+debug:
+  msg: "vivod secret {{ secret }" - вывести сообщение со значением переменной
+
+причем переменный можно брать не только из плейбука
+
+set_fact: full_mesaage="{{}} {{}}"
+
+объединяет несколько значений переменных в одну
+
+register - записать результат выполнения таска в переменную, а затем вывести результат этой переменной
+
+  - shell: uptime
+    register: results
+
+  - debug:
+      var: results.stdout
+
+
+#When
+
+  tasks:
+  - name: Check OS family
+    debug: var=ansible_os_family
+
+  - name: Install Apache Web server for RedHat
+    yum: name=httpd state=latest
+    when: ansible_os_family == "RedHat"
+
+
+#Block when чтобы много раз when не прописывать
+
+Внимание на пробелы
+
+  tasks:
+  - name: Check OS family
+    debug: var=ansible_os_family
+
+  - block:    # Block for RedHat
+
+    - name: Install Apache Web server for RedHat
+      yum: name=httpd state=latest
+
+    - name: Copy index to server
+      copy: src={{ source_file }} dest={{ destin_file }} mode=0555
+      notify: Restart Apache
+
+    - name: Start WEb and Enabled
+      service: name=httpd state=started enabled=yes
+
+    when: ansible_os_family == "RedHat"
+
+# Циклы
+
+#loop
+
+---
+- name: Loops Playbook
+  hosts: all
+  become: yes
+
+  tasks:
+  - name: Say hello to all
+    debug: msg="Hello {{ item }}"
+    loop:
+      - "Vasya"
+      - "Petya"
+      - "Jopa"
+
+  - name: Install many pack
+    yum: name = {{ item }} state=installed
+    loop:
+      - python
+      - tree
+
+  - name: Copy index to server
+    copy: src={{ source_folder }}/{{ item }} dest={{ destin_folder }} mode=0555
+    loop:
+      - "index.html"
+      - "main.css"
+    notify:
+      - Restart Apache
+
+
+#until
+
+  - name: Loop Until example
+    shell: echo -n Z >> myfile.txt && cat myfile.txt
+    register: output
+    delay: 2
+    retries: 10
+    until: output.stdout.find("ZZZZ") == false
+
+#with_fileglob
+
+  - name: Copy index to server
+    copy: src={{ item }} dest={{ destin_folder }} mode=0555
+    with_fileglob: "{{ source_folder }}/*.*"
+    notify:
+      - Restart Apache
+
+
+#шаблоны
+
+"ansible_hostname": "ansibletest",
+
+# Используем j2 файлы
+  - name: generate index
+    template: src={{ source_folder }}/index.html.j2 dest={{ destin_folder }}/index.html mode=055
+    notify:
+      - Restart Apache
+
+#роли
+
+yaroslav@ansiblemaster:~/ansible$ mkdir roles
+yaroslav@ansiblemaster:~/ansible$ cd roles/
+yaroslav@ansiblemaster:~/ansible/roles$ ansible-galaxy init deploy_apache_web
+
+---
+- name: Install Apache and Uploadl my Web Page
+  hosts: all
+  become: yes
+
+  roles:
+    - { role: deploy_apache_web, when: ansible_system == "Linux" }
+
+
+yaroslav@ansiblemaster:~/ansible/roles$ tree
+.
+└── deploy_apache_web
+    ├── defaults
+    │   └── main.yml    # дефолтные переменные (можно переопределить снаружи)
+    ├── files
+    │   └── main.css    # обычные файлы для копирования (без обработки j2)
+    ├── handlers
+    │   └── main.yml    # экшены типа "перезапусти сервис" после notify
+    ├── meta
+    │   └── main.yml    # зависимости роли (другие роли, минимальная версия Ansible и т.д.)
+    ├── README.md       # описание роли
+    ├── tasks
+    │   └── main.yml    # основная логика (таски, блоки, вызовы модулей)
+    ├── templates
+    │   └── index.html.j2  # файлы-шаблоны (с обработкой jinja2)
+    ├── tests
+    │   ├── inventory   # тестовый инвентарь (хосты для проверки роли)
+    │   └── test.yml    # тестовый плейбук для роли
+    └── vars
+        └── main.yml    # переменные, которые нельзя переопределить снаружи (жёсткие)
+
+#extra_vars
+
+ansible-playbook playbookroles.yaml  --extra-var "my_hosts=all"
+  
+
+в плейбуке
+hosts: "{{ my_hosts }}"
+
+
+#include, import
+
+include - постепенно подключает файлы
+import - сразу заранее подключает файлы и пишет переменные если они от этого зависит
+
+---
+- name: My super playboochek
+  hosts: all
+  become: yes
+
+  vars:
+    mytext: "Privet Yarik"
+
+  tasks:
+  - name: test ping
+    ping:
+
+  - name: Creare folders
+    include_tasks: create_folders.yaml
+
+  - name: Create files
+    include_tasks: create_files.yaml
+
+---
+#delegate_to
+
+  - name: Create file1
+    copy:
+      dest: /home/file1.txt
+      content: |
+        This is FileN1
+        On eng hello world
+        on rus {{ mytext }}
+    delegate_to: linux
+
+#Если хотим делать рестарт, то отслеживание нужно передать серверу, который не перезагружается
+  - name: Reboot my servers
+    shell: sleep 3 && reboot now
+    async: 1
+    poll: 0
+
+  - name: Wait till my server will come up online
+    wait_for:
+      host: "{{ inventory_hostname }}"
+      state: started
+      delay: 5
+      timeout: 40
+    delegate_to: 127.0.0.1
+
+# any_errors_fatal: true - любая ошибка true
+
+- name: Ansible
+  hosts: all
+  become: yes
+  any_errors_fatal: true
+
+
+# запустит 1 раз на первом в списке
+    - name: Update my database
+    shell: UPDATING Datbase....
+    run_once: true
+
+
+---
+
+# контроль и перехват ошибок
+
+добавляем ignore_errors и ошибка игнорируется
+  tasks:
+  - name: Task Number1
+    yum: name=treeeeaboba state=latest
+    ignore_errors: yes
+
+
+
+
+условия фейла задания  failed_when: " 'hallo' in results.stdout"
+
+  - name: Task Number2
+    shell: echo hallo chuvaki
+    register: results
+    failed_when: " 'hallo' in results.stdout"
+
+
+failed по return коду
+
+  - name: Task Number2
+    shell: echo hallo chuvaki
+    register: results
+    failed_when: results.rc == 0
+
+---
+#secret
+
+ansible-vault mysecret.txt - создать vault
+
+ansible-vault view mysecret.txt - посмотреть
+
+ansible-vault edit mysecret.txt
+
+ansible-vault rekey mysecret.txt - поменять пароль
+
+ansible-vault encrypt playbook_vault.yaml - зашифровать плейбук с паролем
+
+ansible-vault decrypt playbook_vault.yaml - расшифровать
+
+ansible-playbook playbook_vault.yaml  --ask-vault-pass - запустить зашифрованный плейбук с запросом паролем
+
+ansible-playbook playbook_vault.yaml --vault-password-file pass.txt - запустить плейбук и взять из файла
+
+ ansible-vault encrypt_string - зашифровать строчку
+
+ansible-vault encrypt_string --stdin-name "Mypass" - сделать вывод в переменную Mypass
+
+#вывод копируем в мою переменную
+- name: Ansible less
+  hosts: all
+  become: yes
+
+  vars:
+    admin_password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          32636564333630396636313766623135623932636562386331666164626538623364643664656337
+          6535373662613863323564373834623532656366313464360a333066663530653964623635653230
+          37303431356166306166653134353230663335336162643636613164653532626636333536643533
+          3631623561353031320a346463356266663366393362613563336362656361646462386537383539
+          3334
+
+
+
+ansible-playbook playbook_vault.yaml  --ask-vault-pass - запустить плейбук
+
+echo -n "aboba" | ansible-vault encrypt_string - еще так можно зашифровать строку
+
+!vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          37383737393535313164333239636235376161316364303464316163386436396132333264303865
+          3836633537363364346330633138636238373661343231370a383330313432323765653065383435
+          66326637636231643138653236666565383936373866313263303033663734623931373962346136
+          3130613261336664630a366335313535323230343966303462313762663163333938616230653533
+          3465
+
+
+
+
+
